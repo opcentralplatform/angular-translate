@@ -125,6 +125,26 @@ function translateDirective($translate, $interpolate, $compile, $parse, $rootSco
     return angular.isString(string) ? string.toLowerCase() : string;
   };
 
+  /**
+   * @name escapeHtml
+   * @private
+   *
+   * @description
+   * Escapes HTML special characters to prevent XSS attacks
+   * when translation keys are displayed as fallback values.
+   *
+   * @param {string} value - The value to escape
+   * @returns {string} The escaped HTML string
+   */
+  var escapeHtml = function (value) {
+    if (!angular.isString(value)) {
+      return value;
+    }
+    var element = angular.element('<div></div>');
+    element.text(value);
+    return element.html();
+  };
+
   return {
     restrict: 'AE',
     scope: true,
@@ -312,7 +332,12 @@ function translateDirective($translate, $interpolate, $compile, $parse, $rootSco
           if (translateAttr === 'translate') {
             // default translate into innerHTML
             if (successful || (!successful && !$translate.isKeepContent() && typeof iAttr.translateKeepContent === 'undefined')) {
-              iElement.empty().append(scope.preText + value + scope.postText);
+              // CVE-2024-33665: Escape HTML in the value when translation fails
+              // to prevent XSS attacks through malicious translation keys
+              var safeValue = successful ? value : escapeHtml(value);
+              var safePreText = successful ? scope.preText : escapeHtml(scope.preText);
+              var safePostText = successful ? scope.postText : escapeHtml(scope.postText);
+              iElement.empty().append(safePreText + safeValue + safePostText);
             }
             var globallyEnabled = $translate.isPostCompilingEnabled();
             var locallyDefined = typeof tAttr.translateCompile !== 'undefined';
